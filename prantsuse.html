@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prantsuse keele sõnade treenija</title>
+    
+    <!-- PWA Manifest ja Service Worker seadistus -->
+    <link rel="manifest" id="dynamic-manifest">
+    <meta name="theme-color" content="#8e44ad">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Prantsuse sõnad">
+
+    <!-- Laeme Tesseract.js raamatukogu pildilt teksti lugemiseks -->
+    <script src="https://unpkg.com/tesseract.js@v4.1.1/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f4fc;
+            color: #333;
+            max-width: 600px;
+            margin: 30px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 { color: #5b2c6f; text-align: center; }
+        .menu, .section { margin-bottom: 20px; }
+        button {
+            background-color: #8e44ad;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button:hover { background-color: #732d91; }
+        button.secondary { background-color: #7f8c8d; }
+        button.secondary:hover { background-color: #626d70; }
+        button.success { background-color: #27ae60; }
+        button.success:hover { background-color: #219653; }
+        button.admin-btn { background-color: #d35400; }
+        button.admin-btn:hover { background-color: #b94400; }
+        
+        /* Prantsuse eritähtede nupud */
+        .accent-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 10px;
+        }
+        .accent-btn {
+            background-color: #f2f4f4;
+            color: #2c3e50;
+            border: 1px solid #d5d8dc;
+            padding: 6px 10px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            width: auto !important;
+            flex: 1;
+            min-width: 32px;
+        }
+        .accent-btn:hover { background-color: #e5e8e8; }
+
+        input[type="text"], input[type="file"], input[type="password"] {
+            padding: 10px;
+            width: calc(100% - 22px);
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .hidden { display: none; }
+        .word-list {
+            list-style: none;
+            padding: 0;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .word-list li {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .word-list li:last-child { border-bottom: none; }
+        .feedback {
+            font-weight: bold;
+            margin-top: 10px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .correct { color: #27ae60; }
+        .incorrect { color: #c0392b; }
+        .stats { text-align: center; font-size: 14px; color: #666; margin-bottom: 15px; }
+        .loading-box { text-align: center; font-style: italic; color: #d35400; margin: 10px 0; }
+        textarea {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .mode-select-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Prantsuse keele sõnade treenija</h1>
+
+    <!-- PEAMENÜÜ -->
+    <div id="main-menu" class="menu">
+        <p style="text-align: center;">Vali tegevus:</p>
+        <button onclick="showChoiceMenu()">Ristküsitlus (Valikud)</button>
+        <button onclick="showWriteMenu()">Kirjutamisharjutus</button>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
+        <button onclick="requestAdminAccess()" class="admin-btn">🔒 Sõnade haldamine (Ainult loojale)</button>
+    </div>
+
+    <!-- RISTKÜSITLUSE ALAMENÜÜ (SUUNA VALIK) -->
+    <div id="choice-menu-section" class="section hidden">
+        <h2>Ristküsitlus (Valikvastused)</h2>
+        <div class="mode-select-box">
+            <p style="margin-top: 0; font-weight: bold;">Vali harjutamise suund:</p>
+            <button onclick="startQuiz('choice', 'fr-est')">Prantsuse ➔ Eesti (vali eesti keelne vaste)</button>
+            <button onclick="startQuiz('choice', 'est-fr')" class="success">Eesti ➔ Prantsuse (vali prantsuse keelne vaste)</button>
+        </div>
+        <button class="secondary" onclick="showSection('main-menu')" style="margin-top: 15px;">Tagasi menüüsse</button>
+    </div>
+
+    <!-- KIRJUTAMISE ALAMENÜÜ (SUUNA VALIK) -->
+    <div id="write-menu-section" class="section hidden">
+        <h2>Kirjutamisharjutus</h2>
+        <div class="mode-select-box">
+            <p style="margin-top: 0; font-weight: bold;">Vali harjutamise suund:</p>
+            <button onclick="startQuiz('write', 'fr-est')">Prantsuse ➔ Eesti (kirjuta eesti keeles)</button>
+            <button onclick="startQuiz('write', 'est-fr')" class="success">Eesti ➔ Prantsuse (kirjuta prantsuse keeles)</button>
+        </div>
+        <button class="secondary" onclick="showSection('main-menu')" style="margin-top: 15px;">Tagasi menüüsse</button>
+    </div>
+
+    <!-- SÕNADE LISAMISE VAADE (KAITSTUD) -->
+    <div id="add-section" class="section hidden">
+        <h2>Sõnade haldamine (Looja vaade)</h2>
+        
+        <!-- Pildi üleslaadimine -->
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed #cbd5e1;">
+            <label style="font-weight: bold; display: block; margin-bottom: 5px;">📸 Lisa õpiku pilt:</label>
+            <input type="file" id="image-input" accept="image/*" onchange="processImage(event)">
+            <div id="ocr-status" class="loading-box"></div>
+        </div>
+
+        <input type="text" id="fr-word" placeholder="Prantsuse keelne sõna (nt bonjour)">
+        <input type="text" id="est-word" placeholder="Eesti keelne tõlge (nt tere)">
+        <button onclick="addWord()" class="success">Lisa sõna käsitsi</button>
+
+        <div style="margin-top: 15px;">
+            <label style="font-size: 14px; font-weight: bold;">Tuvastatud või muudetav tekst (Rida-realt: prantsuse - eesti):</label>
+            <textarea id="bulk-text" placeholder="Näiteks:&#10;bonjour - tere&#10;merci - aitäh"></textarea>
+            <button onclick="addBulkWords()">Lisa tekstikastist sõnad</button>
+        </div>
+
+        <h3 style="margin-top: 20px;">Salvestatud sõnad (<span id="word-count">0</span>):</h3>
+        <ul id="word-list" class="word-list"></ul>
+        
+        <button class="secondary" onclick="showSection('main-menu')" style="margin-top: 15px;">Tagasi menüüsse</button>
+    </div>
+
+    <!-- KÜSITLUSE VAADE -->
+    <div id="quiz-section" class="section hidden">
+        <h2 id="quiz-title">Harjutamine</h2>
+        <div class="stats" id="quiz-stats">Küsimus 1 / 5</div>
+        
+        <p id="question-text" style="font-size: 20px; text-align: center; font-weight: bold;"></p>
+        
+        <!-- Valikvastuste konteiner -->
+        <div id="choices-container" style="display: flex; flex-direction: column; gap: 8px;" class="hidden"></div>
+        
+        <!-- Kirjutamisvastuse konteiner -->
+        <div id="write-container" class="hidden">
+            <!-- Prantsuse eritähtede ribad -->
+            <div id="french-accents" class="accent-bar hidden">
+                <button type="button" class="accent-btn" onclick="insertAccent('é')">é</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('è')">è</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('ê')">ê</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('à')">à</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('â')">â</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('ù')">ù</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('û')">û</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('ô')">ô</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('î')">î</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('ï')">ï</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('ë')">ë</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('ç')">ç</button>
+                <button type="button" class="accent-btn" onclick="insertAccent('œ')">œ</button>
+            </div>
+            <input type="text" id="user-answer" placeholder="Kirjuta vaste..." autocomplete="off" autocapitalize="none" onkeypress="checkEnter(event)">
+            <button onclick="checkWrittenAnswer()">Kontrolli</button>
+        </div>
+
+        <div id="feedback" class="feedback"></div>
+        <div style="text-align: center; margin-top: 20px;">
+            <button class="secondary" onclick="showSection('main-menu')">Lõpeta / Tagasi</button>
+        </div>
+    </div>
+
+<script>
+    // Dinamiline PWA manifest prantsuse keele jaoks
+    const manifestData = {
+        "name": "Prantsuse keele sõnade treenija",
+        "short_name": "Prantsuse sõnad",
+        "start_url": "./",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#8e44ad",
+        "icons": [
+            {
+                "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🇫🇷</text></svg>",
+                "sizes": "192x192",
+                "type": "image/svg+xml"
+            }
+        ]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+    document.getElementById('dynamic-manifest').href = URL.createObjectURL(manifestBlob);
+
+    // Service Worker registreerimine
+    if ('serviceWorker' in navigator) {
+        const swCode = `
+            self.addEventListener('install', e => self.skipWaiting());
+            self.addEventListener('activate', e => self.clients.claim());
+            self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
+        `;
+        const swBlob = new Blob([swCode], { type: 'text/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(err => console.log('SW error:', err));
+    }
+
+    // PAROOL LOOJA VAATE JAOKS
+    const ADMIN_PASSWORD = "1234";
+
+    // Eraldi mälu prantsuse keele sõnade jaoks
+    let words = JSON.parse(localStorage.getItem('sonaraamat_fr_words')) || [
+        { fr: "bonjour", est: "tere" },
+        { fr: "merci", est: "aitäh" },
+        { fr: "s'il vous plaît", est: "palun" },
+        { fr: "au revoir", est: "nägemist" }
+    ];
+
+    let currentMode = '';
+    let currentDirection = 'fr-est';
+    let currentIndex = 0;
+    let currentQuizList = [];
+    let score = 0;
+    let activeQuestion = null;
+
+    function saveWordsToStorage() {
+        localStorage.setItem('sonaraamat_fr_words', JSON.stringify(words));
+    }
+
+    function showSection(sectionId) {
+        document.getElementById('main-menu').classList.add('hidden');
+        document.getElementById('choice-menu-section').classList.add('hidden');
+        document.getElementById('write-menu-section').classList.add('hidden');
+        document.getElementById('add-section').classList.add('hidden');
+        document.getElementById('quiz-section').classList.add('hidden');
+        
+        document.getElementById(sectionId).classList.remove('hidden');
+        
+        if (sectionId === 'add-section') {
+            updateWordListUI();
+        }
+    }
+
+    function showChoiceMenu() {
+        showSection('choice-menu-section');
+    }
+
+    function showWriteMenu() {
+        showSection('write-menu-section');
+    }
+
+    function requestAdminAccess() {
+        const password = prompt("Sisesta looja parool:");
+        if (password === ADMIN_PASSWORD) {
+            showSection('add-section');
+        } else if (password !== null) {
+            alert("Vale parool!");
+        }
+    }
+
+    function addWord() {
+        const fr = document.getElementById('fr-word').value.trim();
+        const est = document.getElementById('est-word').value.trim();
+        
+        if (fr && est) {
+            words.push({ fr, est });
+            document.getElementById('fr-word').value = '';
+            document.getElementById('est-word').value = '';
+            saveWordsToStorage();
+            updateWordListUI();
+        } else {
+            alert("Palun täida mõlemad väljad!");
+        }
+    }
+
+    function addBulkWords() {
+        const text = document.getElementById('bulk-text').value.trim();
+        if (!text) return;
+
+        const lines = text.split('\n');
+        let addedCount = 0;
+
+        lines.forEach(line => {
+            let parts = line.split(/[-–:]/);
+            if (parts.length >= 2) {
+                let fr = parts[0].trim();
+                let est = parts[1].trim();
+                fr = fr.replace(/^\d+[\.\)]\s*/, '');
+                if (fr && est) {
+                    words.push({ fr, est });
+                    addedCount++;
+                }
+            }
+        });
+
+        if (addedCount > 0) {
+            saveWordsToStorage();
+            updateWordListUI();
+            document.getElementById('bulk-text').value = '';
+            alert(`Lisati edukalt ${addedCount} sõnapaari!`);
+        } else {
+            alert("Ei suutnud tekstist sõnapaare tuvastada. Veendu, et vorming on stiilis: prantsuse - eesti");
+        }
+    }
+
+    function updateWordListUI() {
+        const listEl = document.getElementById('word-list');
+        document.getElementById('word-count').innerText = words.length;
+        listEl.innerHTML = '';
+        words.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span><strong>${item.fr}</strong> – ${item.est}</span> <button style="width: auto; padding: 4px 8px; font-size: 12px; background-color: #e74c3c; margin:0;" onclick="removeWord(${index})">Kustuta</button>`;
+            listEl.appendChild(li);
+        });
+    }
+
+    function removeWord(index) {
+        words.splice(index, 1);
+        saveWordsToStorage();
+        updateWordListUI();
+    }
+
+    function processImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const statusEl = document.getElementById('ocr-status');
+        statusEl.innerText = "⏳ Loen pildilt teksti... Palun oota.";
+
+        // Kasutame prantsuse ('fra') ja eesti ('est') keele tuvastust
+        Tesseract.recognize(
+            file,
+            'fra+est',
+            { 
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        statusEl.innerText = `⏳ Tuvastamine: ${Math.round(m.progress * 100)}%`;
+                    }
+                }
+            }
+        ).then(({ data: { text } }) => {
+            statusEl.innerText = "✅ Tekst loetud! Kontrolli allolevat kasti ja vajuta 'Lisa tekstikastist sõnad'.";
+            document.getElementById('bulk-text').value = text;
+        }).catch(err => {
+            console.error(err);
+            statusEl.innerText = "❌ Viga pildist teksti lugemisel. Proovi uuesti selgemat pilti.";
+        });
+    }
+
+    function startQuiz(mode, direction) {
+        if (words.length === 0) {
+            alert("Enne harjutamist pead vähemalt ühe sõna lisama!");
+            return;
+        }
+        currentMode = mode;
+        currentDirection = direction;
+        currentQuizList = [...words].sort(() => Math.random() - 0.5);
+        currentIndex = 0;
+        score = 0;
+        
+        showSection('quiz-section');
+        
+        let title = 'Harjutamine';
+        if (mode === 'choice') {
+            title = direction === 'fr-est' ? 'Ristküsitlus: Prantsuse ➔ Eesti' : 'Ristküsitlus: Eesti ➔ Prantsuse';
+        } else {
+            title = direction === 'fr-est' ? 'Kirjutamine: Prantsuse ➔ Eesti' : 'Kirjutamine: Eesti ➔ Prantsuse';
+        }
+
+        document.getElementById('quiz-title').innerText = title;
+        loadNextQuestion();
+    }
+
+    function loadNextQuestion() {
+        document.getElementById('feedback').innerText = '';
+        document.getElementById('user-answer').value = '';
+        
+        if (currentIndex >= currentQuizList.length) {
+            document.getElementById('question-text').innerText = `Harjutus läbi! Sinu tulemus: ${score} / ${currentQuizList.length} õiget.`;
+            document.getElementById('choices-container').classList.add('hidden');
+            document.getElementById('write-container').classList.add('hidden');
+            document.getElementById('french-accents').classList.add('hidden');
+            document.getElementById('quiz-stats').innerText = '';
+            return;
+        }
+
+        document.getElementById('quiz-stats').innerText = `Küsimus ${currentIndex + 1} / ${currentQuizList.length}`;
+        activeQuestion = currentQuizList[currentIndex];
+        
+        if (currentDirection === 'fr-est') {
+            document.getElementById('question-text').innerText = `Mis on sõna "${activeQuestion.fr}" tähendus eesti keeles?`;
+        } else {
+            document.getElementById('question-text').innerText = `Kuidas on prantsuse keeles "${activeQuestion.est}"?`;
+        }
+
+        if (currentMode === 'choice') {
+            document.getElementById('choices-container').classList.remove('hidden');
+            document.getElementById('write-container').classList.add('hidden');
+            document.getElementById('french-accents').classList.add('hidden');
+            setupChoices();
+        } else {
+            document.getElementById('choices-container').classList.add('hidden');
+            document.getElementById('write-container').classList.remove('hidden');
+            
+            // Näita prantsuse tähtede riba ainult siis, kui kirjutatakse prantsuse keeles
+            if (currentDirection === 'est-fr') {
+                document.getElementById('french-accents').classList.remove('hidden');
+            } else {
+                document.getElementById('french-accents').classList.add('hidden');
+            }
+
+            document.getElementById('user-answer').focus();
+        }
+    }
+
+    function setupChoices() {
+        const container = document.getElementById('choices-container');
+        container.innerHTML = '';
+
+        let targetProp = currentDirection === 'fr-est' ? 'est' : 'fr';
+        let options = [activeQuestion[targetProp]];
+        let wrongOptions = words.filter(w => w[targetProp] !== activeQuestion[targetProp]).map(w => w[targetProp]);
+        wrongOptions.sort(() => Math.random() - 0.5);
+        
+        for (let i = 0; i < Math.min(3, wrongOptions.length); i++) {
+            options.push(wrongOptions[i]);
+        }
+        options.sort(() => Math.random() - 0.5);
+
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.innerText = opt;
+            btn.style.width = '100%';
+            btn.onclick = () => checkChoiceAnswer(opt);
+            container.appendChild(btn);
+        });
+    }
+
+    function checkChoiceAnswer(selectedOpt) {
+        const feedbackEl = document.getElementById('feedback');
+        let targetVal = currentDirection === 'fr-est' ? activeQuestion.est : activeQuestion.fr;
+
+        if (selectedOpt === targetVal) {
+            feedbackEl.innerText = "Õige!";
+            feedbackEl.className = "feedback correct";
+            score++;
+        } else {
+            feedbackEl.innerText = `Vale! Õige vastus oli: ${targetVal}`;
+            feedbackEl.className = "feedback incorrect";
+        }
+        currentIndex++;
+        setTimeout(loadNextQuestion, 1500);
+    }
+
+    function checkWrittenAnswer() {
+        const userAns = document.getElementById('user-answer').value.trim().toLowerCase();
+        let targetVal = currentDirection === 'fr-est' ? activeQuestion.est : activeQuestion.fr;
+        const correctAns = targetVal.toLowerCase();
+        const feedbackEl = document.getElementById('feedback');
+
+        if (userAns === correctAns) {
+            feedbackEl.innerText = "Väga hea, õige!";
+            feedbackEl.className = "feedback correct";
+            score++;
+        } else {
+            feedbackEl.innerText = `Vale! Õige vaste oli: ${targetVal}`;
+            feedbackEl.className = "feedback incorrect";
+        }
+        currentIndex++;
+        setTimeout(loadNextQuestion, 1500);
+    }
+
+    function checkEnter(e) {
+        if (e.key === 'Enter') {
+            checkWrittenAnswer();
+        }
+    }
+
+    // Funktsioon eritähtede lisamiseks tekstikasti kursori asukohta
+    function insertAccent(char) {
+        const input = document.getElementById('user-answer');
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const val = input.value;
+        
+        input.value = val.substring(0, start) + char + val.substring(end);
+        input.focus();
+        input.setSelectionRange(start + 1, start + 1);
+    }
+</script>
+
+</body>
+</html>
