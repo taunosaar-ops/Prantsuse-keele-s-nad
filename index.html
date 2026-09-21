@@ -261,12 +261,20 @@
     // PAROOL LOOJA VAATE JAOKS
     const ADMIN_PASSWORD = "1234";
 
-    // Eraldi mälu prantsuse keele sõnade jaoks
+    // Uuendatud sõnade nimekiri
     let words = JSON.parse(localStorage.getItem('sonaraamat_fr_words')) || [
         { fr: "bonjour", est: "tere" },
         { fr: "merci", est: "aitäh" },
         { fr: "s'il vous plaît", est: "palun" },
-        { fr: "au revoir", est: "nägemist" }
+        { fr: "au revoir", est: "nägemist" },
+        { fr: "à gauche", est: "vasakul/vasakule" },
+        { fr: "à droite", est: "paremal/paremale" },
+        { fr: "devant", est: "ees" },
+        { fr: "derrière", est: "taga" },
+        { fr: "sur", est: "peal" },
+        { fr: "dans", est: "sees" },
+        { fr: "à côté de", est: "kõrval" },
+        { fr: "sous", est: "all" }
     ];
 
     let currentMode = '';
@@ -380,7 +388,6 @@
         const statusEl = document.getElementById('ocr-status');
         statusEl.innerText = "⏳ Loen pildilt teksti... Palun oota.";
 
-        // Kasutame prantsuse ('fra') ja eesti ('est') keele tuvastust
         Tesseract.recognize(
             file,
             'fra+est',
@@ -455,7 +462,6 @@
             document.getElementById('choices-container').classList.add('hidden');
             document.getElementById('write-container').classList.remove('hidden');
             
-            // Näita prantsuse tähtede riba ainult siis, kui kirjutatakse prantsuse keeles
             if (currentDirection === 'est-fr') {
                 document.getElementById('french-accents').classList.remove('hidden');
             } else {
@@ -529,7 +535,6 @@
         }
     }
 
-    // Funktsioon eritähtede lisamiseks tekstikasti kursori asukohta
     function insertAccent(char) {
         const input = document.getElementById('user-answer');
         const start = input.selectionStart;
